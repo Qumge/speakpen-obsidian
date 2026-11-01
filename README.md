@@ -81,7 +81,7 @@ generate a new one and paste it back in to resume syncing.
 
 Only needed if you are installing a build that is not in the store yet.
 
-1. Download `main.js`, `manifest.json` (and `styles.css` if present) from the [latest release](https://github.com/xnjiang/speakpen-obsidian/releases).
+1. Download `main.js`, `manifest.json` (and `styles.css` if present) from the [latest release](https://github.com/Qumge/speakpen-obsidian/releases).
 2. Create a folder `<your vault>/.obsidian/plugins/speakpen-sync/` and copy those files into it.
 3. Reload Obsidian and enable **SpeakPen Sync** under **Settings → Community plugins**.
 
@@ -121,7 +121,7 @@ Each synced idea is saved as a Markdown file in your configured folder (default:
 ## Development
 
 ```bash
-git clone https://github.com/xnjiang/speakpen-obsidian.git
+git clone https://github.com/Qumge/speakpen-obsidian.git
 cd speakpen-obsidian
 npm install
 npm run dev    # development build
