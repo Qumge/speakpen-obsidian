@@ -1,5 +1,6 @@
 import { App, PluginSettingTab, Setting } from "obsidian";
 import type SpeakPenPlugin from "./main";
+import { translate as t } from "./i18n";
 
 export class SpeakPenSettingTab extends PluginSettingTab {
   plugin: SpeakPenPlugin;
@@ -18,9 +19,9 @@ export class SpeakPenSettingTab extends PluginSettingTab {
     containerEl.empty();
 
     this.statusSetting = new Setting(containerEl)
-      .setName("Sync status")
+      .setName(t("status"))
       .setDesc(this.plugin.getSyncStatus())
-      .addButton(button => button.setButtonText("Sync now").onClick(async () => {
+      .addButton(button => button.setButtonText(t("syncNow")).onClick(async () => {
         button.setDisabled(true);
         try { await this.plugin.runSync(); } finally { button.setDisabled(false); this.display(); }
       }));
@@ -29,19 +30,19 @@ export class SpeakPenSettingTab extends PluginSettingTab {
     // 语气保持平实：token 是只读的，说清事实即可，不必渲染成风险提示。
     const tokenDesc = new DocumentFragment();
     tokenDesc.append(
-      "Generate a token in the SpeakPen web app at speakpen.app/app, under Settings → Connections (Obsidian card → Generate token), then paste it here."
+      t("tokenHelp")
     );
     tokenDesc.append(tokenDesc.createEl("br"));
     tokenDesc.append(
-      "Like any Obsidian plugin setting, it is saved as plain text in this vault, so it travels with the vault if you sync or commit it. The token is read-only, and you can revoke it in SpeakPen at any time."
+      t("tokenPrivacy")
     );
 
     new Setting(containerEl)
-      .setName("API token")
+      .setName(t("apiToken"))
       .setDesc(tokenDesc)
       .addText((text) =>
         text
-          .setPlaceholder("Paste your API token")
+          .setPlaceholder(t("pasteToken"))
           .setValue(this.plugin.settings.apiToken)
           .onChange(async (value) => {
             await this.plugin.setApiToken(value);
@@ -49,11 +50,11 @@ export class SpeakPenSettingTab extends PluginSettingTab {
       );
 
     new Setting(containerEl)
-      .setName("Sync folder")
-      .setDesc("Vault folder where synced notes will be created.")
+      .setName(t("folder"))
+      .setDesc(t("folderHelp"))
       .addText((text) =>
         text
-          .setPlaceholder("Enter folder name")
+          .setPlaceholder(t("folderPlaceholder"))
           .setValue(this.plugin.settings.syncFolder)
           .onChange(async (value) => {
             this.plugin.settings.syncFolder = value || "SpeakPen";
@@ -62,8 +63,8 @@ export class SpeakPenSettingTab extends PluginSettingTab {
       );
 
     new Setting(containerEl)
-      .setName("Auto sync")
-      .setDesc("Check when Obsidian opens, when you return to it, and on the interval while it stays open. Foreground checks are limited to once a minute.")
+      .setName(t("autoSync"))
+      .setDesc(t("autoSyncHelp"))
       .addToggle((toggle) =>
         toggle
           .setValue(this.plugin.settings.autoSyncEnabled)
@@ -75,8 +76,8 @@ export class SpeakPenSettingTab extends PluginSettingTab {
       );
 
     new Setting(containerEl)
-      .setName("Sync interval (minutes)")
-      .setDesc("How often to check for new ideas (minimum 1 minute).")
+      .setName(t("interval"))
+      .setDesc(t("intervalHelp"))
       .addSlider((slider) =>
         slider
           .setLimits(1, 60, 1)

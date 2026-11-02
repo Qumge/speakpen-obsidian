@@ -41,3 +41,16 @@ describe("native note Markdown",()=>{
   expect(md).not.toContain("https://speakpen.app/audio");
  });
 });
+
+it("does not move already migrated files again when retrying a partial move into a child folder",async()=>{
+ const files=new Map([["Old/a.md","a"],["Old/b.md","b"]]);let fail=true;
+ const vault:any={getAbstractFileByPath:(p:string)=>files.has(p)?{path:p}:null,getFileByPath:(p:string)=>files.has(p)?{path:p}:null,createFolder:async()=>{},rename:async(f:{path:string},p:string)=>{if(f.path==="Old/b.md"&&fail)throw Error("disk failure");files.set(p,files.get(f.path)!);files.delete(f.path);}};
+ const notes={a:{path:"Old/a.md",hash:"a",updatedAt:"a"},b:{path:"Old/b.md",hash:"b",updatedAt:"b"}};
+ const first=await migrateSyncFolder(notes,"Old","Old/New",vault);Object.assign(notes,first.moved);fail=false;
+ const second=await migrateSyncFolder(notes,"Old","Old/New",vault);
+ expect(second.failures).toEqual([]);expect([...files.keys()].sort()).toEqual(["Old/New/a.md","Old/New/b.md"]);
+});
+it("keeps legacy failure originals as Transcript when the older server omits summary_status",()=>{
+ const idea=makeIdea();idea.attributes.message=idea.attributes.transcript_text;
+ const md=buildMarkdown(idea);expect(md).not.toContain("## Summary");expect(md).toContain("## Transcript");
+});

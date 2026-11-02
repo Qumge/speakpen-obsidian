@@ -4,6 +4,14 @@
 
 把 [SpeakPen](https://speakpen.app) 的语音笔记同步为 Obsidian 中的普通 Markdown，供你阅读、编辑或交给自己选择的 AI 使用。
 
+**第一次了解 SpeakPen？[从这里开始 →](https://speakpen.app/?utm_source=github&utm_medium=readme&utm_campaign=speakpen_obsidian)**
+
+[下载 iOS](https://apps.apple.com/app/id6743360755) · [下载 Android](https://play.google.com/store/apps/details?id=com.qumge.speakpen) · [打开网页版](https://speakpen.app/app?utm_source=github&utm_medium=readme&utm_campaign=speakpen_obsidian)
+
+随口记录想法 → 在 SpeakPen 中整理成笔记 → 连接插件 → 在 Obsidian 中继续思考。
+
+插件设置和同步提示跟随 Obsidian 的界面语言，支持中文和英文；其他语言回退到英文。
+
 ## 使用前提
 
 需要 SpeakPen 账号、只读 API token，以及到 speakpen.app 的网络连接。插件本身免费，不提供独立录音或转写。SpeakPen 免费计划每月 3 次录音、每次最多 5 分钟；Pro 为每月 9.90 美元，每月 60 次、每次最多 20 分钟。

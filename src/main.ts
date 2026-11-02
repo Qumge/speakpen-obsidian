@@ -3,6 +3,7 @@ import { SpeakPenSettings, DEFAULT_SETTINGS, SyncState, DEFAULT_SYNC_STATE, Plug
 import { SpeakPenAPI } from "./api";
 import { syncIdeasToVault, migrateSyncFolder } from "./sync";
 import { SpeakPenSettingTab } from "./settings";
+import { translate as t } from "./i18n";
 
 export default class SpeakPenPlugin extends Plugin {
   settings: SpeakPenSettings = { ...DEFAULT_SETTINGS };
@@ -16,6 +17,7 @@ export default class SpeakPenPlugin extends Plugin {
   private activeSync: Promise<void> | null = null;
   private saveQueue: Promise<void> = Promise.resolve();
   private generation = 0;
+  private visibilityGeneration = 0;
   private stopped = false;
   private ready = false;
   private lastAutomaticAttempt: number | null = null;
@@ -24,12 +26,15 @@ export default class SpeakPenPlugin extends Plugin {
     await this.loadPluginData();
     this.statusBarEl = this.addStatusBarItem();
     this.updateStatusBar();
-    this.addRibbonIcon("refresh-cw", "Sync now", () => { void this.runSync(); });
-    this.addCommand({id: "sync-now", name: "Sync now", callback: () => { void this.runSync(); }});
+    this.addRibbonIcon("refresh-cw", t("syncNow"), () => { void this.runSync(); });
+    this.addCommand({id: "sync-now", name: t("syncNow"), callback: () => { void this.runSync(); }});
     this.settingTab = new SpeakPenSettingTab(this.app, this);
     this.addSettingTab(this.settingTab);
     this.registerDomEvent(window, "focus", () => this.requestAutomaticSync());
-    this.registerDomEvent(document, "visibilitychange", () => this.requestAutomaticSync());
+    this.registerDomEvent(document, "visibilitychange", () => {
+      if (document.visibilityState === "hidden") this.visibilityGeneration++;
+      this.requestAutomaticSync();
+    });
     this.app.workspace.onLayoutReady(() => {
       if (this.stopped) return;
       this.ready = true;
@@ -51,12 +56,12 @@ export default class SpeakPenPlugin extends Plugin {
     this.syncState = migrateSyncState(data?.syncState);
     this.accounts = Object.fromEntries(Object.entries(data?.accounts ?? {}).map(([id, state]) => [id, migrateSyncState(state)]));
     if (this.syncState.ownerId) this.accounts[this.syncState.ownerId] = this.syncState;
-    else this.legacyState = this.syncState;
+    this.legacyState = data?.legacyState ? migrateSyncState(data.legacyState) : (!this.syncState.ownerId ? this.syncState : null);
   }
 
   async savePluginData() {
     // Capture together, then serialize writes so a slower old save cannot win.
-    const data = JSON.parse(JSON.stringify({settings: this.settings, syncState: this.syncState, accounts: this.accounts})) as PluginData;
+    const data = JSON.parse(JSON.stringify({settings: this.settings, syncState: this.syncState, accounts: this.accounts, legacyState: this.legacyState})) as PluginData;
     const operation = this.saveQueue.catch(() => {}).then(() => this.saveData(data));
     this.saveQueue = operation;
     await operation;
@@ -102,16 +107,17 @@ export default class SpeakPenPlugin extends Plugin {
   }
 
   getSyncStatus(): string {
-    if (!this.settings.apiToken) return "Add your API token to start syncing.";
+    if (!this.settings.apiToken) return t("missingToken");
     const state = this.syncState;
     switch (state.outcome) {
-      case "syncing": return "Syncing notes…";
-      case "partial": return `Sync incomplete: ${state.failureCount ?? 0} notes need retry.`;
-      case "conflict": return `${state.conflictCount ?? 0} notes need review. Your local edits are preserved.`;
-      case "failed": return "Sync failed. Check your token and connection, then sync again.";
+      case "paused": return t("paused");
+      case "syncing": return t("syncing");
+      case "partial": return t("partial", {count: state.failureCount ?? 0});
+      case "conflict": return t("conflict", {count: state.conflictCount ?? 0});
+      case "failed": return t("failed");
     }
-    if (state.lastSyncTime) return `Synced ${new Date(state.lastSyncTime).toLocaleTimeString([], {hour:"2-digit", minute:"2-digit"})}`;
-    return "Not synced yet.";
+    if (state.lastSyncTime) return t("synced", {time: new Date(state.lastSyncTime).toLocaleTimeString([], {hour:"2-digit", minute:"2-digit"})});
+    return t("notSynced");
   }
 
   private updateStatusBar() {
@@ -123,7 +129,7 @@ export default class SpeakPenPlugin extends Plugin {
     if (this.stopped) return;
     if (this.activeSync) return this.activeSync;
     if (!this.settings.apiToken) {
-      if (!silent) new Notice("Add your SpeakPen API token in settings, then sync again.");
+      if (!silent) new Notice(t("missingToken"));
       return;
     }
     // The first await in performSync happens before the operation is published here.
@@ -142,7 +148,9 @@ export default class SpeakPenPlugin extends Plugin {
     const generation = this.generation;
     const token = this.settings.apiToken;
     const folder = this.settings.syncFolder;
-    const current = () => !this.stopped && this.generation === generation && this.settings.apiToken === token && this.settings.syncFolder === folder;
+    const visibilityGeneration = this.visibilityGeneration;
+    const sameSettings = () => !this.stopped && this.generation === generation && this.settings.apiToken === token && this.settings.syncFolder === folder;
+    const current = () => sameSettings() && (!silent || (document.visibilityState !== "hidden" && this.visibilityGeneration === visibilityGeneration));
     const check = () => { if (!current()) throw new Error("Sync session changed"); };
     let state: SyncState | null = null;
     this.syncState.outcome = "syncing";
@@ -189,9 +197,13 @@ export default class SpeakPenPlugin extends Plugin {
       await this.savePluginData(); check();
       if (state.outcome !== "success") new Notice(this.getSyncStatus());
       else if (!silent || report.created.length || report.updated.length || Object.keys(migration.moved).length) {
-        new Notice(`Synced: ${report.created.length} new, ${report.updated.length} updated, ${Object.keys(migration.moved).length} moved.`);
+        new Notice(t("result", {created: report.created.length, updated: report.updated.length, moved: Object.keys(migration.moved).length}));
       }
     } catch {
+      if (sameSettings() && !current()) {
+        this.syncState.outcome = "paused";
+        this.updateStatusBar();
+      }
       if (current()) {
         this.syncState.outcome = "failed";
         this.syncState.lastAttemptTime = new Date().toISOString();

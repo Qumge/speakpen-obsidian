@@ -2,7 +2,20 @@
 
 [English](README.md) · [简体中文](README.zh-CN.md)
 
-Sync your [SpeakPen](https://speakpen.app) voice summaries into your vault as Markdown notes.
+Capture a passing thought with **SpeakPen**, then keep the original transcript and available
+summary in your own Obsidian vault as ordinary Markdown. Your notes stay readable and
+editable, ready for the AI tools you choose.
+
+**New to SpeakPen? [Start with SpeakPen →](https://speakpen.app/?utm_source=github&utm_medium=readme&utm_campaign=speakpen_obsidian)**
+
+[Get the iOS app](https://apps.apple.com/app/id6743360755) ·
+[Get the Android app](https://play.google.com/store/apps/details?id=com.qumge.speakpen) ·
+[Open SpeakPen web](https://speakpen.app/app?utm_source=github&utm_medium=readme&utm_campaign=speakpen_obsidian)
+
+Record a thought → find it in SpeakPen → connect this plugin → read it in Obsidian.
+The plugin syncs existing notes; it does not record or transcribe by itself.
+
+Plugin settings and sync notices follow the Obsidian interface language: Chinese or English (other languages use English).
 
 ## What this plugin needs
 

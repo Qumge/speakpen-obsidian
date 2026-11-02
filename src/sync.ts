@@ -43,7 +43,8 @@ export function buildMarkdown(idea: APIIdea): string {
     lines.splice(5, 0, `summary_status: "${safe}"`);
   }
 
-  if (a.message && (!summary || summary === "completed")) {
+  const legacyOriginal = !summary && a.transcript_text != null && a.message?.trim() === a.transcript_text.trim();
+  if (a.message && !legacyOriginal && (!summary || summary === "completed")) {
     lines.push("## Summary");
     lines.push("");
     lines.push(a.message);
@@ -316,7 +317,11 @@ export async function migrateSyncFolder(
   }
 
   const prefix = `${normalizePath(oldFolder)}/`;
-  const relocatable = Object.entries(notes).filter(([, note]) => note.path.startsWith(prefix));
+  const targetPrefix = `${normalizePath(newFolder)}/`;
+  const intoChild = targetPrefix.startsWith(prefix);
+  const relocatable = Object.entries(notes).filter(([, note]) =>
+    note.path.startsWith(prefix) && !(intoChild && note.path.startsWith(targetPrefix))
+  );
   if (relocatable.length === 0) return { moved, failures };
 
   await ensureFolder(newFolder, vault, hooks);

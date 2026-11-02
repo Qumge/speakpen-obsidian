@@ -19,6 +19,8 @@ vi.mock("obsidian", () => ({
   PluginSettingTab: class {},
   Setting: class {},
   Notice: class { constructor(public message: string) {} },
+  getLanguage: () => (globalThis as any).__speakpenTestLanguage ?? "en",
+  moment: {locale: () => "en"},
   normalizePath: (s: string) => s.replace(/\/+/g, "/"),
   requestUrl: vi.fn(),
 }));
@@ -167,4 +169,32 @@ it("starts the replacement account once an obsolete in-flight startup check fina
  deliver({status:200,json:makeIdeasResponse([makeIdea({id:"old"})])}); await settle();
  expect([...vault.files.values()].join("\n")).toContain('speakpen_id: "replacement"');
  expect([...vault.files.values()].join("\n")).not.toContain('speakpen_id: "old"'); p.onunload();
+});
+
+it("does not continue an automatic pass after Obsidian becomes hidden",async()=>{
+ const {p,vault,ready}=await setup(); let deliver!:(v:any)=>void;
+ http.mockImplementationOnce(async()=>({status:200,json:{data:{id:"owner-a"}}}) as any).mockImplementationOnce(()=>new Promise(resolve=>{deliver=resolve;}) as any);
+ ready();await settle();visibility="hidden";
+ deliver({status:200,json:makeIdeasResponse([makeIdea()],{next_page:2})});await settle();
+ expect(vault.files.size).toBe(0);expect(http.mock.calls.length).toBe(2);
+ visibility="visible";vi.advanceTimersByTime(60_000);doc.dispatchEvent(new Event("visibilitychange"));await settle();
+ expect(vault.files.size).toBe(1);p.onunload();
+});
+
+it("retains unbound legacy tracking if a token is replaced before owner verification and the app restarts",async()=>{
+ const {p,vault}=await setup();await p.runSync();const tracked=JSON.parse(JSON.stringify(p.syncState));delete tracked.ownerId;
+ const q:any=new (Plugin as any)();q.app=p.app;q.persisted={settings:{apiToken:"old"},syncState:tracked};await q.onload();
+ let deliver!:(v:any)=>void;http.mockImplementationOnce(()=>new Promise(resolve=>{deliver=resolve;}) as any);
+ const running=q.runSync();await settle();await q.setApiToken("rotated");q.onunload();
+ deliver({status:200,json:{data:{id:"owner-a"}}});await running;
+ const restarted:any=new (Plugin as any)();restarted.app=p.app;restarted.persisted=q.persisted;await restarted.onload();await restarted.runSync();
+ expect(vault.files.size).toBe(1);expect(Object.keys(restarted.syncState.notes)).toEqual(["idea-1"]);restarted.onunload();p.onunload();
+});
+
+it("uses Chinese synchronization status with a Chinese Obsidian interface",async()=>{
+ vi.stubGlobal("__speakpenTestLanguage","zh");
+ const {p,vault}=await setup();
+ expect(p.getSyncStatus()).toContain("尚未同步");
+ vault.failWrites=true;await p.runSync();expect(p.getSyncStatus()).toContain("同步未完成");
+ vault.failWrites=false;await p.runSync();expect(p.getSyncStatus()).toContain("已同步");p.onunload();
 });

@@ -54,7 +54,7 @@ export interface SyncState {
   lastSyncTime: string | null;
   ownerId?: string;
   lastAttemptTime?: string | null;
-  outcome?: "idle" | "syncing" | "success" | "partial" | "conflict" | "failed";
+  outcome?: "idle" | "syncing" | "success" | "partial" | "conflict" | "failed" | "paused";
   failureCount?: number;
   conflictCount?: number;
 }
@@ -72,6 +72,7 @@ export interface PluginData {
   settings: SpeakPenSettings;
   syncState: SyncState;
   accounts?: Record<string, SyncState>;
+  legacyState?: SyncState | null;
 }
 
 /** SpeakPen API idea attributes (snake_case from API) */
