@@ -1,6 +1,18 @@
 import { Vault, normalizePath } from "obsidian";
 import { APIIdea, SyncFailure, SyncReport, SyncState, SyncedNote } from "./types";
 
+export interface SyncHooks {
+  isCurrent?: () => boolean;
+  checkpoint?: (notes: Record<string, SyncedNote>) => Promise<void>;
+}
+
+class SyncSessionChanged extends Error {
+  constructor() { super("Sync session changed"); }
+}
+function checkSession(hooks: SyncHooks) {
+  if (hooks.isCurrent && !hooks.isCurrent()) throw new SyncSessionChanged();
+}
+
 /** Remove characters that are invalid in filenames */
 export function sanitizeFilename(name: string): string {
   const sanitized = name.replace(/[\\/:*?"<>|#^[\]]/g, "").trim().replace(/\.+$/, "").trim();
@@ -25,7 +37,13 @@ export function buildMarkdown(idea: APIIdea): string {
   lines.push("---");
   lines.push("");
 
-  if (a.message) {
+  const summary = a.summary_status;
+  if (summary) {
+    const safe = ["completed", "failed", "pending", "processing", "waiting_budget", "not_requested"].includes(summary) ? summary : "unknown";
+    lines.splice(5, 0, `summary_status: "${safe}"`);
+  }
+
+  if (a.message && (!summary || summary === "completed")) {
     lines.push("## Summary");
     lines.push("");
     lines.push(a.message);
@@ -95,7 +113,8 @@ export function buildFilePath(folder: string, title: string, date: string, vault
  * conclusive. Folder creation is treated as best effort: vault.create below is the
  * authoritative point of failure, and it names the file it could not write.
  */
-export async function ensureFolder(folder: string, vault: Vault): Promise<void> {
+export async function ensureFolder(folder: string, vault: Vault, hooks: SyncHooks = {}): Promise<void> {
+  checkSession(hooks);
   const parts = normalizePath(folder).split("/").filter((part) => part.length > 0);
 
   let current = "";
@@ -103,6 +122,7 @@ export async function ensureFolder(folder: string, vault: Vault): Promise<void> 
     current = current ? `${current}/${part}` : part;
     if (vault.getAbstractFileByPath(current)) continue;
 
+    checkSession(hooks);
     try {
       await vault.createFolder(current);
     } catch {
@@ -131,7 +151,9 @@ export async function syncIdeasToVault(
   folder: string,
   vault: Vault,
   state: SyncState,
+  hooks: SyncHooks = {},
 ): Promise<SyncReport> {
+  checkSession(hooks);
   const report: SyncReport = {
     created: [],
     updated: [],
@@ -144,12 +166,13 @@ export async function syncIdeasToVault(
 
   const completed = ideas.filter((idea) => idea.attributes.status === "completed");
   if (completed.length > 0) {
-    await ensureFolder(folder, vault);
+    await ensureFolder(folder, vault, hooks);
   }
 
   const legacy = new Set(state.legacyIds);
 
   for (const idea of completed) {
+    checkSession(hooks);
     try {
       const tracked = state.notes[idea.id];
 
@@ -164,6 +187,7 @@ export async function syncIdeasToVault(
 
         const path = buildFilePath(folder, idea.attributes.title, idea.attributes.created_at, vault);
         const content = buildMarkdown(idea);
+        checkSession(hooks);
         await vault.create(path, content);
         report.created.push(idea.id);
         report.notes[idea.id] = {
@@ -171,6 +195,8 @@ export async function syncIdeasToVault(
           hash: hashContent(content),
           updatedAt: idea.attributes.updated_at,
         };
+        await hooks.checkpoint?.({ [idea.id]: report.notes[idea.id] });
+        checkSession(hooks);
         continue;
       }
 
@@ -186,6 +212,7 @@ export async function syncIdeasToVault(
         // Deleted or moved out from under us. Write it again where it belongs now.
         const path = buildFilePath(folder, idea.attributes.title, idea.attributes.created_at, vault);
         const content = buildMarkdown(idea);
+        checkSession(hooks);
         await vault.create(path, content);
         report.created.push(idea.id);
         report.notes[idea.id] = {
@@ -193,10 +220,13 @@ export async function syncIdeasToVault(
           hash: hashContent(content),
           updatedAt: idea.attributes.updated_at,
         };
+        await hooks.checkpoint?.({ [idea.id]: report.notes[idea.id] });
+        checkSession(hooks);
         continue;
       }
 
       const onDisk = await vault.read(existing);
+      checkSession(hooks);
       if (hashContent(onDisk) !== tracked.hash) {
         // The user has written in this note. Their words are not reproducible from
         // anywhere; the SpeakPen copy is. Never trade one for the other.
@@ -205,6 +235,7 @@ export async function syncIdeasToVault(
       }
 
       const content = buildMarkdown(idea);
+      checkSession(hooks);
       await vault.modify(existing, content);
       report.updated.push(idea.id);
       report.notes[idea.id] = {
@@ -212,7 +243,10 @@ export async function syncIdeasToVault(
         hash: hashContent(content),
         updatedAt: idea.attributes.updated_at,
       };
+      await hooks.checkpoint?.({ [idea.id]: report.notes[idea.id] });
+      checkSession(hooks);
     } catch (error: unknown) {
+      if (error instanceof SyncSessionChanged) throw error;
       report.failures.push({
         id: idea.id,
         title: idea.attributes.title,
@@ -221,7 +255,8 @@ export async function syncIdeasToVault(
     }
   }
 
-  report.cursor = nextCursor(ideas, report.failures, state.cursor);
+  checkSession(hooks);
+  report.cursor = nextCursor(ideas, [...report.failures, ...report.localEdits.map(edit => ({...edit, message: "Local edits require review"}))], state.cursor);
   return report;
 }
 
@@ -270,7 +305,9 @@ export async function migrateSyncFolder(
   oldFolder: string | null,
   newFolder: string,
   vault: Vault,
+  hooks: SyncHooks = {},
 ): Promise<{ moved: Record<string, SyncedNote>; failures: SyncFailure[] }> {
+  checkSession(hooks);
   const moved: Record<string, SyncedNote> = {};
   const failures: SyncFailure[] = [];
 
@@ -282,9 +319,10 @@ export async function migrateSyncFolder(
   const relocatable = Object.entries(notes).filter(([, note]) => note.path.startsWith(prefix));
   if (relocatable.length === 0) return { moved, failures };
 
-  await ensureFolder(newFolder, vault);
+  await ensureFolder(newFolder, vault, hooks);
 
   for (const [id, note] of relocatable) {
+    checkSession(hooks);
     try {
       const file = vault.getFileByPath(note.path);
       if (!file) continue; // Already gone; nothing to move and nothing to fix.
@@ -301,9 +339,13 @@ export async function migrateSyncFolder(
         target = normalizePath(`${newFolder}/${stem} (${counter}).md`);
       }
 
+      checkSession(hooks);
       await vault.rename(file, target);
       moved[id] = { ...note, path: target };
+      await hooks.checkpoint?.({ [id]: moved[id] });
+      checkSession(hooks);
     } catch (error: unknown) {
+      if (error instanceof SyncSessionChanged) throw error;
       failures.push({
         id,
         title: note.path,

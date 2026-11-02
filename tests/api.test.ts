@@ -117,3 +117,21 @@ it("only ever issues GET requests, so nothing is pushed back to SpeakPen", async
     await expect(api.fetchIdeasPage(1)).rejects.toThrow("Invalid API token");
   });
 });
+
+describe("verified owner and revoked pagination",()=>{
+ it("verifies stable owner identity using only GET",async()=>{
+  mockRequestUrl.mockReset().mockResolvedValueOnce({status:200,json:{data:{id:"42",type:"user"}}} as any);
+  expect(await new SpeakPenAPI("owner-token").fetchOwnerId()).toBe("42");
+  expect(mockRequestUrl.mock.calls[0][0]).toMatchObject({method:"GET",url:"https://speakpen.app/api/v1/me"});
+ });
+ it("does not request the next page after its session was replaced",async()=>{
+  let current=true;
+  mockRequestUrl.mockReset().mockImplementationOnce(async()=>{current=false;return {status:200,json:makeIdeasResponse([makeIdea()],{next_page:2})} as any;});
+  await expect(new SpeakPenAPI("old",()=>current).fetchIdeasSince(null)).rejects.toThrow();
+  expect(mockRequestUrl.mock.calls).toHaveLength(1);
+ });
+ it("does not expose provider diagnostics or a token in its error",async()=>{
+  mockRequestUrl.mockReset().mockRejectedValueOnce(new Error("raw TOKEN_SECRET diagnostic"));
+  await expect(new SpeakPenAPI("TOKEN_SECRET").fetchIdeasSince(null)).rejects.toThrow("Could not fetch notes. Check your connection and try again.");
+ });
+});

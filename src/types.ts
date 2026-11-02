@@ -52,6 +52,11 @@ export interface SyncState {
    */
   syncFolder: string | null;
   lastSyncTime: string | null;
+  ownerId?: string;
+  lastAttemptTime?: string | null;
+  outcome?: "idle" | "syncing" | "success" | "partial" | "conflict" | "failed";
+  failureCount?: number;
+  conflictCount?: number;
 }
 
 export const DEFAULT_SYNC_STATE: SyncState = {
@@ -66,6 +71,7 @@ export const DEFAULT_SYNC_STATE: SyncState = {
 export interface PluginData {
   settings: SpeakPenSettings;
   syncState: SyncState;
+  accounts?: Record<string, SyncState>;
 }
 
 /** SpeakPen API idea attributes (snake_case from API) */
@@ -79,6 +85,8 @@ export interface IdeaAttributes {
   category: string | null;
   audio_url: string | null;
   status: "pending" | "processing" | "completed" | "failed";
+  summary_status?: string | null;
+  transcript_status?: string | null;
 }
 
 /** Single idea from API response */

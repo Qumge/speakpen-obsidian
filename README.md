@@ -1,5 +1,7 @@
 # SpeakPen Sync
 
+[English](README.md) · [简体中文](README.zh-CN.md)
+
 Sync your [SpeakPen](https://speakpen.app) voice summaries into your vault as Markdown notes.
 
 ## What this plugin needs
@@ -11,24 +13,25 @@ Sync your [SpeakPen](https://speakpen.app) voice summaries into your vault as Ma
   each. Pro is $9.90/month for 60 recordings a month, up to 20 minutes each. The plugin
   itself is free and does not limit anything.
 - **Network access to `speakpen.app`.** On each sync the plugin makes read-only `GET`
-  requests to `https://speakpen.app/api/v1/ideas`, authenticated with your API token, to
+  requests to `https://speakpen.app/api/v1/me` to verify your account and
+  `https://speakpen.app/api/v1/ideas`, authenticated with your API token, to
   fetch notes that changed since the last sync. That is the only host it contacts, and the
-  only thing it asks for. It never sends your vault anywhere, never writes back to SpeakPen,
+  only data it asks for. It never sends your vault anywhere, never writes back to SpeakPen,
   and collects no telemetry. See [Privacy Policy](https://speakpen.app/privacy).
 
 ## Features
 
 - **Incremental Sync** — Asks SpeakPen only what changed since last time, so a routine sync
-  costs one request no matter how many notes you have
+  uses one account check plus one or more pages of changed notes
 - **Edits Flow Through** — Re-transcribe or edit a note in SpeakPen and the note in your
   vault is rewritten in place, instead of drifting out of sync forever. The file keeps the
   name it was created with, even if you rename the note in SpeakPen
 - **Your Edits Win** — A note you have written in is never overwritten. The plugin notices
   and leaves it alone
-- **Auto Sync** — Runs on a configurable interval; manual sync from the ribbon or command palette
+- **Auto Sync** — Checks once after startup, checks when you return (at most once a minute), and polls at the configured interval while Obsidian is visible. Manual sync is available in settings, the ribbon and command palette. Obsidian must be open; closing the app stops syncing
 - **Markdown Notes** — Each idea becomes a Markdown file with YAML frontmatter
 - **Follows Your Folder** — Change the sync folder and existing notes move with it
-- **Status Bar** — Shows last sync time at a glance
+- **Honest Status** — Only a fully successful pass updates the last success time. Partial failures and preserved local edits need attention; settings show the same status on mobile
 
 ## Setup
 
@@ -38,9 +41,10 @@ Sync your [SpeakPen](https://speakpen.app) voice summaries into your vault as Ma
    [speakpen.app/app](https://speakpen.app/app), under **Settings → Connections** (Obsidian card → **Generate token**)
 4. Configure sync folder and interval as needed
 
-Audio is intentionally not linked from the note: the API hands out presigned URLs that
-expire within hours, so the link would be dead by the next day. Use `speakpen_id` to find
-the recording back in SpeakPen.
+Audio is never downloaded or linked by this plugin. Read-only API tokens do not receive
+audio URLs. Use `speakpen_id` to find the recording back in SpeakPen. Native original
+transcripts remain readable when a summary is waiting or fails; they are not labelled as
+a completed summary.
 
 ## How syncing decides what to do
 
@@ -59,6 +63,20 @@ The plugin remembers where it put each note and what it wrote there.
 Notes synced by versions before 0.3.0 are remembered so they are never duplicated, but they
 cannot be updated or moved: those versions recorded only an id, so the plugin does not know
 where those notes went or whether you have since rewritten them.
+
+## Account switching and retries
+
+The plugin verifies the stable account ID before reading notes. Rotating a token for the
+same account preserves its cursor; switching accounts keeps separate tracking. Late
+responses from an old token cannot begin new writes. A filesystem write already started
+may finish, but its checkpoint belongs only to its original account. Existing notes are
+never deleted when you switch accounts. On the first upgrade from an unbound legacy
+state, one full check reconciles matching IDs without reusing an unverified cursor.
+
+Failed writes and locally edited notes hold the inclusive cursor so they can be checked
+again. A failed folder move is retried, while successful moves are remembered. Your own
+edits are never overwritten automatically; review the affected note in SpeakPen and in
+your vault. Syncing is one-way and does not propagate deletions.
 
 ## About your API token
 

@@ -3,6 +3,10 @@ import type SpeakPenPlugin from "./main";
 
 export class SpeakPenSettingTab extends PluginSettingTab {
   plugin: SpeakPenPlugin;
+  private statusSetting: Setting | null = null;
+
+  refreshStatus() { this.statusSetting?.setDesc(this.plugin.getSyncStatus()); }
+  hide() { this.statusSetting = null; }
 
   constructor(app: App, plugin: SpeakPenPlugin) {
     super(app, plugin);
@@ -12,6 +16,14 @@ export class SpeakPenSettingTab extends PluginSettingTab {
   display(): void {
     const { containerEl } = this;
     containerEl.empty();
+
+    this.statusSetting = new Setting(containerEl)
+      .setName("Sync status")
+      .setDesc(this.plugin.getSyncStatus())
+      .addButton(button => button.setButtonText("Sync now").onClick(async () => {
+        button.setDisabled(true);
+        try { await this.plugin.runSync(); } finally { button.setDisabled(false); this.display(); }
+      }));
 
     // 说明里点明 token 存在哪、什么动作会带走它、以及可以随时吊销。
     // 语气保持平实：token 是只读的，说清事实即可，不必渲染成风险提示。
@@ -32,8 +44,7 @@ export class SpeakPenSettingTab extends PluginSettingTab {
           .setPlaceholder("Paste your API token")
           .setValue(this.plugin.settings.apiToken)
           .onChange(async (value) => {
-            this.plugin.settings.apiToken = value;
-            await this.plugin.savePluginData();
+            await this.plugin.setApiToken(value);
           })
       );
 
@@ -52,7 +63,7 @@ export class SpeakPenSettingTab extends PluginSettingTab {
 
     new Setting(containerEl)
       .setName("Auto sync")
-      .setDesc("Automatically sync new ideas on an interval.")
+      .setDesc("Check when Obsidian opens, when you return to it, and on the interval while it stays open. Foreground checks are limited to once a minute.")
       .addToggle((toggle) =>
         toggle
           .setValue(this.plugin.settings.autoSyncEnabled)
